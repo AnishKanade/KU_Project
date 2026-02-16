@@ -1,63 +1,191 @@
-Purpose: Load the provided inputs (student_info.sqlite3, enrollments.dat, departments.json) into a single analytics store, run SQL transforms to compute one row per student × term, and export output.csv with the required fields.
+# Architecture and Data Transformation Documentation
 
-High-level flow
-[ student_info.sqlite3 ]   [ enrollments.dat ]   [ departments.json ]
-        │                        │                     │
-        └─────> Load into :contentReference[oaicite:0]{index=0} (student, acad_prog, enrollments, departments)
+## Project Approach
+
+This project implements an ETL (Extract, Transform, Load) pipeline that:
+- Loads student data from three different sources (SQLite, pipe-delimited file, JSON)
+- Stores all data in a DuckDB database for flexible querying
+- Transforms the data using SQL to generate a term-by-term enrollment report
+- Exports the results to a CSV file
+
+**Technology Choice**: DuckDB was selected as the database because it is an in-process analytical database that requires no server setup, supports advanced SQL features (window functions), and is optimized for analytical queries.
+
+**Programming Language**: Python was used with pandas for data loading and cleaning, and DuckDB for SQL transformations.
+
+---
+
+## Data Flow Diagram
+
+```
+┌─────────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+│ student_info.sqlite3│   │ enrollments.dat  │   │ departments.json │
+│  - student table    │   │  (pipe-delimited)│   │  (flat JSON)     │
+│  - acad_prog table  │   │                  │   │                  │
+└──────────┬──────────┘   └────────┬─────────┘   └────────┬─────────┘
+           │                       │                       │
+           └───────────────────────┼───────────────────────┘
                                    │
                                    ▼
-                         SQL transforms (views & queries)
+                    ┌──────────────────────────────┐
+                    │      DuckDB Database         │
+                    │  (ku.duckdb)                 │
+                    │                              │
+                    │  Tables:                     │
+                    │  - student                   │
+                    │  - acad_prog                 │
+                    │  - enrollments               │
+                    │  - departments               │
+                    └──────────────┬───────────────┘
                                    │
                                    ▼
-                                output.csv
+                    ┌──────────────────────────────┐
+                    │   SQL Transformations        │
+                    │   (Views & Queries)          │
+                    └──────────────┬───────────────┘
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │       output.csv             │
+                    │  (one row per student/term)  │
+                    └──────────────────────────────┘
+```
 
-Transformation stages (short)
+---
 
-total_credits — sum CREDIT_HOURS grouped by EMPLID + STRM.
+## Data Transformations
 
-credits_by_dept — sum CREDIT_HOURS grouped by EMPLID + STRM + DEPARTMENT.
+### Step 1: Load Data into DuckDB
 
-ranked_depts — use ROW_NUMBER() window function partitioned by student_id, term, ordered by dept_credits DESC, then dept_name ASC to break ties alphabetically.
+**SQLite Tables (student_info.sqlite3)**
+- Read `student` and `acad_prog` tables using Python's sqlite3 library
+- Normalize column names to uppercase
+- Load into DuckDB tables
 
-final select — join totals, focused department (where rn = 1), and student.LAST_NAME to produce the final CSV columns:
+**Enrollments File (enrollments.dat)**
+- Parse pipe-delimited file using pandas
+- Clean data: strip whitespace, convert credit hours to integers
+- Load into DuckDB `enrollments` table
 
-student_id,last_name,term,total_credits,focused_department_name,focused_department_contact
+**Departments File (departments.json)**
+- Parse JSON file into pandas DataFrame
+- Normalize column names and clean data
+- Load into DuckDB `departments` table
 
-How data is loaded (brief)
+### Step 2: Calculate Total Credits per Student-Term
 
-Read SQLite tables using sqlite3 / pandas and write them into DuckDB. (Student table provides LAST_NAME.)
+Create a view that sums credit hours for each student in each term:
 
-Read enrollments.dat with pandas.read_csv(sep="|") and persist into DuckDB as enrollments.
+```sql
+CREATE VIEW total_credits AS
+SELECT EMPLID AS student_id, 
+       STRM AS term, 
+       SUM(CREDIT_HOURS) AS total_credits
+FROM enrollments
+GROUP BY EMPLID, STRM;
+```
 
-Read departments.json with json → pandas.DataFrame and persist as departments.
-(You can mention in README that pandas and duckdb are used.) For clarity: we used Python + pandas to load/clean data and persist into DuckDB.
+### Step 3: Calculate Credits by Department
 
-Key design decisions
+Create a view that breaks down credits by department for each student-term:
 
-DuckDB chosen because it is embeddable, fast for analytic SQL, and supports window functions (cleanly implements the tie-break requirement).
+```sql
+CREATE VIEW credits_by_dept AS
+SELECT EMPLID AS student_id, 
+       STRM AS term, 
+       DEPARTMENT AS dept_code,
+       SUM(CREDIT_HOURS) AS dept_credits
+FROM enrollments
+GROUP BY EMPLID, STRM, DEPARTMENT;
+```
 
-Keep source tables (student, acad_prog) intact in DuckDB to preserve lineage and enable future queries.
+### Step 4: Identify Focused Department
 
-Use SQL views for stepwise validation (readable and testable).
+Create a view that ranks departments for each student-term combination. The department with the most credits is ranked #1. If there's a tie, the department that comes first alphabetically is selected:
 
-Prefer SQL for aggregation and ranking rather than manual Python grouping (simpler, less error-prone).
+```sql
+CREATE VIEW ranked_depts AS
+SELECT 
+  c.student_id,
+  c.term,
+  c.dept_code,
+  COALESCE(d.DEPT_NAME, c.dept_code) AS dept_name,
+  d.CONTACT_PERSON AS dept_contact,
+  ROW_NUMBER() OVER (
+    PARTITION BY c.student_id, c.term
+    ORDER BY c.dept_credits DESC, 
+             COALESCE(d.DEPT_NAME, c.dept_code) ASC
+  ) AS rn
+FROM credits_by_dept c
+LEFT JOIN departments d ON c.dept_code = d.DEPT_CODE;
+```
 
-Assumptions & edge cases
+**Key Logic**: The `ROW_NUMBER()` window function assigns a rank to each department for a given student-term. The `ORDER BY` clause ensures:
+1. Departments with more credits come first (`dept_credits DESC`)
+2. In case of a tie, departments are sorted alphabetically (`dept_name ASC`)
 
-Non-numeric or missing CREDIT_HOURS → treated as 0.
+### Step 5: Generate Final Output
 
-If DEPARTMENT (from enrollments) has no match in departments.json, the pipeline uses the department code as the department name and leaves contact empty (NULL).
+Join all the data together to create the final report:
 
-Only student+term combinations with enrollments are included in output (matches spec).
+```sql
+SELECT
+  t.student_id,
+  s.LAST_NAME AS last_name,
+  t.term,
+  t.total_credits,
+  rd.dept_name AS focused_department_name,
+  rd.dept_contact AS focused_department_contact
+FROM total_credits t
+LEFT JOIN ranked_depts rd 
+  ON t.student_id = rd.student_id 
+  AND t.term = rd.term 
+  AND rd.rn = 1
+LEFT JOIN student s 
+  ON t.student_id = s.EMPLID
+ORDER BY t.student_id, t.term;
+```
 
-All EMPLID values are treated as strings to preserve leading zeros where present.
+This produces one row per student per term with:
+- Student ID and last name
+- Term code
+- Total credits for that term
+- The focused department (where they took the most credits)
+- Contact person for that department
 
-Quick validation checks (run after producing output.csv)
+---
 
-Verify header matches output_snippet.csv:
-head -n 1 output.csv should equal the expected header.
+## Design Decisions
 
-Spot-check totals for one student-term by summing enrollments:
-SELECT SUM(CREDIT_HOURS) FROM enrollments WHERE EMPLID='1000000' AND STRM='2251'; (run in DuckDB).
+**Database Schema**: The DuckDB schema preserves the original source table structures. This design:
+- Maintains data lineage and traceability
+- Enables future ad-hoc queries and reporting
+- Supports historical analysis (e.g., tracking program changes over time)
 
-Verify tie-break logic by querying credits_by_dept for a sample student-term and checking ORDER BY dept_credits DESC, dept_name ASC.
+**Transformation Approach**: SQL views are used for transformations rather than Python code because:
+- SQL is declarative and easier to understand
+- Views can be tested independently
+- DuckDB's query optimizer handles performance
+- Window functions cleanly implement the tie-breaking logic
+
+**Data Quality**: 
+- All string fields are trimmed of whitespace
+- Credit hours are converted to integers with error handling
+- LEFT JOINs preserve all student records even if department information is missing
+- Column names are normalized to uppercase for consistency
+
+**Focused Department Logic**: When a student has equal credits in multiple departments for a term, the department that comes first alphabetically is selected. This is implemented using SQL's `ORDER BY` with multiple columns in the window function.
+
+---
+
+## Output Specification
+
+The output CSV file (`output.csv`) contains:
+- **Format**: Comma-separated values without quotes
+- **Rows**: One row per student per term (2,986 data rows + 1 header)
+- **Columns**:
+  - `student_id` – Student identifier
+  - `last_name` – Student's last name
+  - `term` – Term code
+  - `total_credits` – Total credits enrolled for that term (integer)
+  - `focused_department_name` – Department with most credits (alphabetically first if tied)
+  - `focused_department_contact` – Contact person for the focused department

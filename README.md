@@ -8,10 +8,26 @@ This project loads student data from multiple sources (SQLite, pipe-delimited fi
 
 - Python 3.8 or higher
 - pip package manager
+- venv (Python virtual environment module, usually included with Python)
 
 ## Installation
 
-Install required dependencies:
+### 1. Create and activate a virtual environment (recommended)
+
+**On macOS/Linux:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**On Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+### 2. Install required dependencies
+
 ```bash
 pip install -r requirements.txt
 ```

@@ -1,0 +1,34 @@
+# Generated output files
+output.csv
+ku.duckdb
+ku.duckdb.wal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Input files (reviewers have these)
+KU_Input/
+
+# Documentation (not required for submission)
+docs/

@@ -10,6 +10,14 @@ This project loads student data from multiple sources (SQLite, pipe-delimited fi
 - pip package manager
 - venv (Python virtual environment module, usually included with Python)
 
+### Input Files
+
+The project expects the following files in the `KU_Input/` directory:
+
+- `student_info.sqlite3` - SQLite database with student and academic program tables
+- `enrollments.dat` - Pipe-delimited file with course enrollment records
+- `departments.json` - JSON file with department information
+
 ## Installation
 
 ### 1. Create and activate a virtual environment (recommended)
@@ -43,14 +51,6 @@ This will:
 1. Create a DuckDB database file (`ku.duckdb`) in the project root
 2. Load all data from the three input files into DuckDB tables
 3. Generate `output.csv` with the required student enrollment summary
-
-## Input Files
-
-The project expects the following files in the `KU_Input/` directory:
-
-- `student_info.sqlite3` - SQLite database with student and academic program tables
-- `enrollments.dat` - Pipe-delimited file with course enrollment records
-- `departments.json` - JSON file with department information
 
 ## Output
 

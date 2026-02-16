@@ -103,6 +103,33 @@ ORDER BY t.student_id, t.term;
 
 def run():
     print("Starting load_and_transform...")
+    
+    # Validate input files exist
+    print("Validating input files...")
+    required_files = {
+        "student_info.sqlite3": SQLITE_PATH,
+        "enrollments.dat": ENROLLMENTS_PATH,
+        "departments.json": DEPARTMENTS_PATH
+    }
+    
+    missing_files = []
+    for name, path in required_files.items():
+        if not os.path.exists(path):
+            missing_files.append(name)
+    
+    if missing_files:
+        print("\nERROR: Missing required input files:")
+        for file in missing_files:
+            print(f"  - {file}")
+        print(f"\nPlease ensure all input files are in the '{INPUT_DIR}' directory.")
+        print("Required files:")
+        print("  - student_info.sqlite3")
+        print("  - enrollments.dat")
+        print("  - departments.json")
+        return
+    
+    print("  ✓ All input files found")
+    print()
 
     # connect to/create duckdb file
     con = duckdb.connect(database=OUT_DUCKDB, read_only=False)

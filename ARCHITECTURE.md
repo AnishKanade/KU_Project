@@ -2,36 +2,25 @@
 
 ## Project Approach
 
-This project implements an ETL (Extract, Transform, Load) pipeline that:
-- Loads student data from three different sources (SQLite, pipe-delimited file, JSON)
-- Stores all data in a DuckDB database for flexible querying
-- Transforms the data using SQL to generate a term-by-term enrollment report
+### Main Branch (Python + DuckDB)
+This implementation uses Python for data loading and DuckDB for SQL transformations:
+- Python with pandas loads data from multiple sources into DuckDB
+- DuckDB performs all SQL transformations
+- Python exports the final CSV using pandas
 
-  <!-- For each student + term:
-  * Calculate total credits
-  * Find which department the student took the most credits in
-  * If tie → choose alphabetically
-  * Join department contact
-  * Export to CSV
-  That’s it. -->  
-
-- Exports the results to a CSV file
-
-<!-- Format should be simmilar to the given output_snippet.csv -->
+### SQL-Only Branch (Pure SQL)
+An alternate implementation (`sql-only-alt` branch) uses only SQL:
+- DuckDB native functions load data (ATTACH, read_csv, read_json)
+- All transformations in pure SQL
+- No Python or pandas dependencies required
 
 **Technology Choice**: DuckDB was selected as the database because it is an in-process analytical database that requires no server setup, supports advanced SQL features (window functions), and is optimized for analytical queries.
-
-**Programming Language**: Python was used with pandas for data loading and cleaning, and DuckDB for SQL transformations.
 
 ---
 
 ## Data Flow Diagram
 
-<!-- the first data file contains student table and the academic progrm table, the second contains the enrollment data and the third contains the departmen.I load all three sources into a local DuckDB database to centralize the data. Once inside DuckDB, I run SQL transformations queries using views to compute total credits and determine each student’s focused department per term.
-
-The final result is exported as a clean output.csv file with one row per student per term. -->
 ```
-
 ┌─────────────────────┐   ┌──────────────────┐   ┌──────────────────┐
 │ student_info.sqlite3│   │ enrollments.dat  │   │ departments.json │
 │  - student table    │   │  (pipe-delimited)│   │  (flat JSON)     │
@@ -71,10 +60,11 @@ The final result is exported as a clean output.csv file with one row per student
 
 ### Step 1: Load Data into DuckDB
 
+#### Main Branch (Python + DuckDB)
+
 **SQLite Tables (student_info.sqlite3)**
 - Read `student` and `acad_prog` tables using Python's sqlite3 library
-- Normalize column names to uppercase 
-<!-- to avoid case sensiticity and mismatch joins -->
+- Normalize column names to uppercase
 - Load into DuckDB tables
 
 **Enrollments File (enrollments.dat)**
@@ -86,6 +76,21 @@ The final result is exported as a clean output.csv file with one row per student
 - Parse JSON file into pandas DataFrame
 - Normalize column names and clean data
 - Load into DuckDB `departments` table
+
+#### SQL-Only Branch (Pure SQL)
+
+**SQLite Tables**
+- Use `ATTACH 'student_info.sqlite3' AS sqlite_db` to access tables
+- Create tables with explicit schema and constraints
+- Insert data with transformations
+
+**Enrollments File**
+- Use `read_csv('enrollments.dat', delim='|')` to read pipe-delimited data
+- Create table with schema and load data
+
+**Departments File**
+- Use `read_json('departments.json')` to read JSON data
+- Create table with schema and load data
 
 ### Step 2: Calculate Total Credits per Student-Term
 
@@ -99,7 +104,7 @@ SELECT EMPLID AS student_id,
 FROM enrollments
 GROUP BY EMPLID, STRM;
 ```
-<!-- so we first created a view to store the sql query, creating a view make it easier for debugging and allow the final query to be much cleaner. we then renamed column name emplid to student_id as per the instructions. we did the same with strm as term. we then summed or added all the credit hours per grouping. then from the raw data table, we used group by to group rows together so we can aggregate them. this would produce one row per student -->
+
 ### Step 3: Calculate Credits by Department
 
 Create a view that breaks down credits by department for each student-term:
@@ -113,10 +118,7 @@ SELECT EMPLID AS student_id,
 FROM enrollments
 GROUP BY EMPLID, STRM, DEPARTMENT;
 ```
-<!-- we then used another view for the credits by department Because now we need: Student + Term + Department level. we then used group by this time to change the grain to One row per student-term-department. and in the duckdb visualization it would show the headers like: student_id
-term
-dept_code
-dept_credits -->
+
 ### Step 4: Identify Focused Department
 
 Create a view that ranks departments for each student-term combination. The department with the most credits is ranked #1. If there's a tie, the department that comes first alphabetically is selected:
@@ -137,9 +139,7 @@ SELECT
 FROM credits_by_dept c
 LEFT JOIN departments d ON c.dept_code = d.DEPT_CODE;
 ```
-<!-- and then final view uses a window function so it does not collapse rows and can calucalte across partition while still keeping the original row structure. we use select to take all the columns from credits_by_dept and assign ranking first second third, we use PARTITION BY student_id, term  to reset ranking for each student-term. and following the instrcutions given we use ORDER BY dept_credits DESC to obtain Highest credits first. and
-dept_code ASC in case  two departments have same credits,
- so we cna obrain Alphabetically to resolve any tie . now to debug, "WHERE rank = 2", we get the focused department. -->
+
 **Key Logic**: The `ROW_NUMBER()` window function assigns a rank to each department for a given student-term. The `ORDER BY` clause ensures:
 1. Departments with more credits come first (`dept_credits DESC`)
 2. In case of a tie, departments are sorted alphabetically (`dept_name ASC`)
@@ -177,24 +177,54 @@ This produces one row per student per term with:
 
 ## Design Decisions
 
-**Database Schema**: The DuckDB schema preserves the original source table structures. This design:
+### Database Schema
+
+#### Main Branch
+The DuckDB schema preserves the original source table structures with minimal transformation. This design:
 - Maintains data lineage and traceability
 - Enables future ad-hoc queries and reporting
 - Supports historical analysis (e.g., tracking program changes over time)
 
-**Transformation Approach**: SQL views are used for transformations rather than Python code because:
+#### SQL-Only Branch
+The DuckDB schema includes explicit relational constraints to ensure data integrity:
+
+**Primary Keys:**
+- `student.EMPLID` - Uniquely identifies each student
+- `acad_prog.ID` - Uniquely identifies each program record
+- `departments.DEPT_CODE` - Uniquely identifies each department
+
+**Foreign Keys:**
+- `acad_prog.EMPLID` → `student.EMPLID` - Ensures every program belongs to a valid student
+- `enrollments.EMPLID` → `student.EMPLID` - Ensures every enrollment belongs to a valid student
+
+**NOT NULL Constraints:**
+- Critical fields like student names, department names, and enrollment details are required
+- Prevents incomplete or invalid data from entering the database
+
+**Why Constraints Matter:**
+- Enforce referential integrity at the database level
+- Prevent orphaned records (e.g., enrollments without students)
+- Document relationships between tables
+- Enable database-level validation before data is inserted
+
+### Transformation Approach
+
+SQL views are used for transformations rather than Python code because:
 - SQL is declarative and easier to understand
 - Views can be tested independently
 - DuckDB's query optimizer handles performance
 - Window functions cleanly implement the tie-breaking logic
 
-**Data Quality**: 
+### Data Quality
+
 - All string fields are trimmed of whitespace
 - Credit hours are converted to integers with error handling
 - LEFT JOINs preserve all student records even if department information is missing
-- Column names are normalized to uppercase for consistency
+- Column names are normalized to uppercase for consistency (except in SQL-only branch where case is preserved for readability)
 
-**Focused Department Logic**: When a student has equal credits in multiple departments for a term, the department that comes first alphabetically is selected. This is implemented using SQL's `ORDER BY` with multiple columns in the window function.
+### Focused Department Logic
+
+When a student has equal credits in multiple departments for a term, the department that comes first alphabetically is selected. This is implemented using SQL's `ORDER BY` with multiple columns in the window function.
 
 ---
 
@@ -202,7 +232,7 @@ This produces one row per student per term with:
 
 The output CSV file (`output.csv`) contains:
 - **Format**: Comma-separated values without quotes
-- **Rows**: One row per student per term (2,986 data rows + 1 header)
+- **Rows**: One row per student per term (2,986 data rows + 1 header = 2,987 total lines)
 - **Columns**:
   - `student_id` – Student identifier
   - `last_name` – Student's last name
@@ -225,12 +255,17 @@ The SQL-only variant follows the same logical flow but implements everything usi
    - Pipe-delimited file: `read_csv('file.dat', delim='|')`
    - JSON file: `read_json('file.json')`
 
-2. **Data Transformations** (SQL views):
+2. **Schema Definition** (Explicit constraints):
+   - Tables created with `CREATE TABLE` statements
+   - PRIMARY KEY, FOREIGN KEY, and NOT NULL constraints declared
+   - Separate `INSERT INTO` statements for data loading
+
+3. **Data Transformations** (SQL views):
    - Same view structure as Python implementation
    - Identical window function logic for focused department
    - All aggregations and joins in pure SQL
 
-3. **Output Generation** (SQL command):
+4. **Output Generation** (SQL command):
    - `COPY TO 'output.csv'` instead of pandas export
    - Produces identical output format
 
@@ -239,6 +274,7 @@ The SQL-only variant follows the same logical flow but implements everything usi
 - **Reproducibility**: No Python environment setup needed
 - **Transparency**: All logic visible in single SQL file
 - **Performance**: Database-native operations throughout
+- **Data Integrity**: Explicit constraints enforce referential integrity
 
 ### Trade-offs
 - Requires DuckDB CLI installation

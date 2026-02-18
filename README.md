@@ -4,11 +4,20 @@
 
 This project loads student data from multiple sources (SQLite, pipe-delimited file, JSON) into a DuckDB database and generates a comprehensive enrollment report showing each student's term-by-term credit totals and primary department focus.
 
+**Two Implementations Available:**
+- **Main Branch**: Python + DuckDB (uses pandas for data loading)
+- **SQL-Only Branch** (`sql-only-alt`): Pure SQL (no Python dependencies)
+
 ## Prerequisites
 
+### For Main Branch (Python + DuckDB)
 - Python 3.8 or higher
 - pip package manager
 - venv (Python virtual environment module, usually included with Python)
+
+### For SQL-Only Branch (Pure SQL)
+- DuckDB CLI (no Python required)
+- Install: `brew install duckdb` (macOS) or see [DuckDB installation](https://duckdb.org/docs/installation/)
 
 ### Input Files
 
@@ -42,6 +51,8 @@ pip install -r requirements.txt
 
 ## Running the Project
 
+### Main Branch (Python + DuckDB)
+
 Execute the main script from the project root directory:
 ```bash
 python src/load_and_transform.py
@@ -62,11 +73,11 @@ Contains the following tables:
 - `departments` - Department contact and location information
 
 ### CSV Report (`output.csv`)
-One row per student per term with columns:
+One row per student per term (2,986 data rows + 1 header = 2,987 total lines) with columns:
 - `student_id` - Student identifier
 - `last_name` - Student's last name
 - `term` - Academic term code
-- `total_credits` - Total credits enrolled for that term
+- `total_credits` - Total credits enrolled for that term (integer)
 - `focused_department_name` - Department where student took most credits (alphabetically first if tied)
 - `focused_department_contact` - Contact person for the focused department
 
@@ -158,13 +169,16 @@ See `requirements.txt` for specific versions:
 An alternate pure SQL implementation is available in the `sql-only-alt` branch. This approach uses only SQL for all data loading and transformations, with no Python or pandas dependencies.
 
 ### Why Created
-- Demonstrates database-native data processing
-- Eliminates Python dependencies for transformations
+- Demonstrates database-native data processing with explicit schema constraints
+- Eliminates Python dependencies entirely
 - Provides a portable, reproducible SQL-only pipeline
-- Useful for environments where Python is not available or preferred
+- Shows proper relational database design with PRIMARY KEY, FOREIGN KEY, and NOT NULL constraints
 
 ### How to Run
 ```bash
+# Switch to the SQL-only branch
+git checkout sql-only-alt
+
 # Ensure you have DuckDB CLI installed
 duckdb --version
 
@@ -174,9 +188,15 @@ duckdb ku.duckdb < sql_pipeline/ku_load_and_transform.sql
 
 ### Key Differences
 - **Data Loading**: Uses DuckDB's native `ATTACH`, `read_csv()`, and `read_json()` functions
+- **Schema Design**: Explicit table definitions with PRIMARY KEY, FOREIGN KEY, and NOT NULL constraints
 - **Transformations**: Pure SQL views and queries (no pandas operations)
 - **Output**: Uses SQL `COPY TO` command instead of pandas `to_csv()`
 - **Dependencies**: Only requires DuckDB CLI (no Python packages needed)
 
+### Schema Constraints (SQL-Only Branch)
+- **Primary Keys**: student.EMPLID, acad_prog.ID, departments.DEPT_CODE
+- **Foreign Keys**: acad_prog.EMPLID → student.EMPLID, enrollments.EMPLID → student.EMPLID
+- **NOT NULL**: Critical fields like names, department codes, and enrollment details
+
 ### Note
-Both implementations produce identical output and follow the same logical transformation flow.
+Both implementations produce identical output (2,986 data rows + 1 header = 2,987 total lines) and follow the same logical transformation flow.

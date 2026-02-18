@@ -173,6 +173,7 @@ An alternate pure SQL implementation is available in the `sql-only-alt` branch. 
 - Eliminates Python dependencies entirely
 - Provides a portable, reproducible SQL-only pipeline
 - Shows proper relational database design with PRIMARY KEY, FOREIGN KEY, and NOT NULL constraints
+- Includes built-in validation checks for data quality assurance
 
 ### How to Run
 ```bash
@@ -190,6 +191,7 @@ duckdb ku.duckdb < sql_pipeline/ku_load_and_transform.sql
 - **Data Loading**: Uses DuckDB's native `ATTACH`, `read_csv()`, and `read_json()` functions
 - **Schema Design**: Explicit table definitions with PRIMARY KEY, FOREIGN KEY, and NOT NULL constraints
 - **Transformations**: Pure SQL views and queries (no pandas operations)
+- **Validation**: Built-in checks at each stage (source tables, views, final output)
 - **Output**: Uses SQL `COPY TO` command instead of pandas `to_csv()`
 - **Dependencies**: Only requires DuckDB CLI (no Python packages needed)
 

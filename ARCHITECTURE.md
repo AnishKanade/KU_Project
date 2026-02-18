@@ -275,6 +275,14 @@ The SQL-only variant follows the same logical flow but implements everything usi
 - **Transparency**: All logic visible in single SQL file
 - **Performance**: Database-native operations throughout
 - **Data Integrity**: Explicit constraints enforce referential integrity
+- **Validation**: Built-in checks ensure data quality at each stage
+
+### Validation Checks
+The SQL-only implementation includes lightweight validation at key stages:
+- Verifies source tables are not empty after loading
+- Confirms transformation views produce results
+- Validates final output before export
+- Fails fast with clear error messages if data is missing
 
 ### Trade-offs
 - Requires DuckDB CLI installation

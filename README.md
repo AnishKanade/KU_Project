@@ -150,3 +150,33 @@ See `requirements.txt` for specific versions:
 - The script creates/overwrites `ku.duckdb` and `output.csv` on each run
 - All paths are calculated relative to the script location for portability
 - The DuckDB file can be queried directly using the DuckDB CLI or Python API for ad-hoc analysis
+
+---
+
+## Alternate SQL-Only Implementation
+
+An alternate pure SQL implementation is available in the `sql-only-alt` branch. This approach uses only SQL for all data loading and transformations, with no Python or pandas dependencies.
+
+### Why Created
+- Demonstrates database-native data processing
+- Eliminates Python dependencies for transformations
+- Provides a portable, reproducible SQL-only pipeline
+- Useful for environments where Python is not available or preferred
+
+### How to Run
+```bash
+# Ensure you have DuckDB CLI installed
+duckdb --version
+
+# Run the SQL pipeline
+duckdb ku.duckdb < sql_pipeline/ku_load_and_transform.sql
+```
+
+### Key Differences
+- **Data Loading**: Uses DuckDB's native `ATTACH`, `read_csv()`, and `read_json()` functions
+- **Transformations**: Pure SQL views and queries (no pandas operations)
+- **Output**: Uses SQL `COPY TO` command instead of pandas `to_csv()`
+- **Dependencies**: Only requires DuckDB CLI (no Python packages needed)
+
+### Note
+Both implementations produce identical output and follow the same logical transformation flow.

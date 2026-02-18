@@ -210,3 +210,39 @@ The output CSV file (`output.csv`) contains:
   - `total_credits` – Total credits enrolled for that term (integer)
   - `focused_department_name` – Department with most credits (alphabetically first if tied)
   - `focused_department_contact` – Contact person for the focused department
+
+---
+
+## SQL-Only Architecture Variant
+
+An alternate implementation using pure SQL is available in the `sql-only-alt` branch. This approach demonstrates database-native data processing without Python dependencies.
+
+### Architecture Overview
+The SQL-only variant follows the same logical flow but implements everything using DuckDB SQL:
+
+1. **Data Loading** (SQL-native):
+   - SQLite tables: `ATTACH 'file.sqlite3' AS sqlite_db`
+   - Pipe-delimited file: `read_csv('file.dat', delim='|')`
+   - JSON file: `read_json('file.json')`
+
+2. **Data Transformations** (SQL views):
+   - Same view structure as Python implementation
+   - Identical window function logic for focused department
+   - All aggregations and joins in pure SQL
+
+3. **Output Generation** (SQL command):
+   - `COPY TO 'output.csv'` instead of pandas export
+   - Produces identical output format
+
+### Benefits
+- **Portability**: Runs anywhere DuckDB CLI is available
+- **Reproducibility**: No Python environment setup needed
+- **Transparency**: All logic visible in single SQL file
+- **Performance**: Database-native operations throughout
+
+### Trade-offs
+- Requires DuckDB CLI installation
+- Less flexible for complex data cleaning
+- No programmatic error handling
+
+Both implementations produce identical results and demonstrate different approaches to the same data engineering problem.

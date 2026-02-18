@@ -15,32 +15,60 @@
 -- Attach the SQLite database to access its tables
 ATTACH 'KU_Input/student_info.sqlite3' AS sqlite_db (TYPE SQLITE);
 
--- Create student table with proper schema
+-- Create student table with proper schema and constraints
 -- Primary Key: EMPLID uniquely identifies each student
+-- NOT NULL constraints ensure data quality for critical fields
 -- This table provides demographic and admission information
-CREATE OR REPLACE TABLE student AS
+CREATE OR REPLACE TABLE student (
+    EMPLID VARCHAR PRIMARY KEY,
+    FIRST_NAME VARCHAR NOT NULL,
+    LAST_NAME VARCHAR NOT NULL,
+    NAME VARCHAR NOT NULL,
+    EMAIL_ADDR VARCHAR,
+    BIRTHDATE DATE,
+    ADMIT_TERM VARCHAR,
+    ADMIT_TYPE VARCHAR
+);
+
+-- Load data into student table with proper transformations
+INSERT INTO student
 SELECT 
-    UPPER(TRIM(EMPLID)) AS EMPLID,
+    TRIM(EMPLID) AS EMPLID,
     UPPER(TRIM(FIRST_NAME)) AS FIRST_NAME,
     UPPER(TRIM(LAST_NAME)) AS LAST_NAME,
     UPPER(TRIM(NAME)) AS NAME,
     UPPER(TRIM(EMAIL_ADDR)) AS EMAIL_ADDR,
-    UPPER(TRIM(BIRTHDATE)) AS BIRTHDATE,
-    UPPER(TRIM(ADMIT_TERM)) AS ADMIT_TERM,
+    TRIM(BIRTHDATE) AS BIRTHDATE,
+    TRIM(ADMIT_TERM) AS ADMIT_TERM,
     UPPER(TRIM(ADMIT_TYPE)) AS ADMIT_TYPE
 FROM sqlite_db.student;
 
--- Create acad_prog table with proper schema
--- Foreign Key: EMPLID references student.EMPLID
+-- Create acad_prog table with proper schema and constraints
+-- Primary Key: ID uniquely identifies each program record
+-- Foreign Key: EMPLID references student.EMPLID to maintain referential integrity
+-- This ensures every program record belongs to a valid student
+-- NOT NULL constraints ensure critical fields are always populated
 -- This table tracks academic program enrollments and changes over time
-CREATE OR REPLACE TABLE acad_prog AS
+CREATE OR REPLACE TABLE acad_prog (
+    ID INTEGER PRIMARY KEY,
+    EMPLID VARCHAR NOT NULL,
+    ACAD_PROG VARCHAR NOT NULL,
+    PROG_STATUS VARCHAR,
+    PROG_ACTION VARCHAR,
+    EFFDT DATE,
+    DEGREE VARCHAR,
+    FOREIGN KEY (EMPLID) REFERENCES student(EMPLID)
+);
+
+-- Load data into acad_prog table with proper transformations
+INSERT INTO acad_prog
 SELECT 
     ID,
-    UPPER(TRIM(EMPLID)) AS EMPLID,
+    TRIM(EMPLID) AS EMPLID,
     UPPER(TRIM(ACAD_PROG)) AS ACAD_PROG,
     UPPER(TRIM(PROG_STATUS)) AS PROG_STATUS,
     UPPER(TRIM(PROG_ACTION)) AS PROG_ACTION,
-    UPPER(TRIM(EFFDT)) AS EFFDT,
+    TRIM(EFFDT) AS EFFDT,
     UPPER(TRIM(DEGREE)) AS DEGREE
 FROM sqlite_db.acad_prog;
 
@@ -48,15 +76,29 @@ FROM sqlite_db.acad_prog;
 DETACH sqlite_db;
 
 -- Load enrollments from pipe-delimited file
+-- Primary Key: Composite key would be (EMPLID, STRM, COURSE_ID)
+-- Foreign Key: EMPLID references student.EMPLID
+-- NOT NULL constraints ensure data integrity for critical enrollment fields
 -- This table links students to courses with credit hours
 -- CREDIT_HOURS is converted to INTEGER to match output requirements
-CREATE OR REPLACE TABLE enrollments AS
+CREATE OR REPLACE TABLE enrollments (
+    EMPLID VARCHAR NOT NULL,
+    STRM VARCHAR NOT NULL,
+    COURSE_ID VARCHAR NOT NULL,
+    DEPARTMENT VARCHAR NOT NULL,
+    COURSE_NAME VARCHAR,
+    CREDIT_HOURS INTEGER NOT NULL,
+    FOREIGN KEY (EMPLID) REFERENCES student(EMPLID)
+);
+
+-- Load data into enrollments table
+INSERT INTO enrollments
 SELECT 
-    UPPER(TRIM(EMPLID)) AS EMPLID,
-    UPPER(TRIM(STRM)) AS STRM,
+    TRIM(EMPLID) AS EMPLID,
+    TRIM(STRM) AS STRM,
     UPPER(TRIM(COURSE_ID)) AS COURSE_ID,
     UPPER(TRIM(DEPARTMENT)) AS DEPARTMENT,
-    UPPER(TRIM(COURSE_NAME)) AS COURSE_NAME,
+    TRIM(COURSE_NAME) AS COURSE_NAME,
     CAST(TRIM(CREDIT_HOURS) AS INTEGER) AS CREDIT_HOURS
 FROM read_csv('KU_Input/enrollments.dat', 
               delim='|', 
@@ -71,8 +113,20 @@ FROM read_csv('KU_Input/enrollments.dat',
               });
 
 -- Load departments from JSON file
+-- Primary Key: DEPT_CODE uniquely identifies each department
+-- NOT NULL constraints ensure department code and name are always present
 -- This table provides department contact information
-CREATE OR REPLACE TABLE departments AS
+CREATE OR REPLACE TABLE departments (
+    DEPT_CODE VARCHAR PRIMARY KEY,
+    DEPT_NAME VARCHAR NOT NULL,
+    BUILDING VARCHAR,
+    CONTACT_PERSON VARCHAR,
+    PHONE VARCHAR,
+    EMAIL VARCHAR
+);
+
+-- Load data into departments table
+INSERT INTO departments
 SELECT 
     UPPER(TRIM(DEPT_CODE)) AS DEPT_CODE,
     TRIM(DEPT_NAME) AS DEPT_NAME,

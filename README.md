@@ -2,21 +2,15 @@
 
 ## Project Overview
 
-This project loads student data from multiple sources (SQLite, pipe-delimited file, JSON) into a DuckDB database and generates a comprehensive enrollment report showing each student's term-by-term credit totals and primary department focus.
+This project loads student data from multiple sources (SQLite, pipe-delimited file, JSON) into a DuckDB database using pure SQL and generates a comprehensive enrollment report showing each student's term-by-term credit totals and primary department focus.
 
-**Two Implementations Available:**
-- **Main Branch**: Python + DuckDB (uses pandas for data loading)
-- **SQL-Only Branch** (`sql-only-alt`): Pure SQL (no Python dependencies)
+All data loading, transformations, validation, and export steps are implemented entirely in SQL.
+
 
 ## Prerequisites
 
-### For Main Branch (Python + DuckDB)
-- Python 3.8 or higher
-- pip package manager
-- venv (Python virtual environment module, usually included with Python)
-
-### For SQL-Only Branch (Pure SQL)
-- DuckDB CLI (no Python required)
+### For SQL Branch (Pure SQL)
+- DuckDB CLI installed locally
 - Install: `brew install duckdb` (macOS) or see [DuckDB installation](https://duckdb.org/docs/installation/)
 
 ### Input Files
@@ -27,35 +21,11 @@ The project expects the following files in the `KU_Input/` directory:
 - `enrollments.dat` - Pipe-delimited file with course enrollment records
 - `departments.json` - JSON file with department information
 
-## Installation
-
-### 1. Create and activate a virtual environment (recommended)
-
-**On macOS/Linux:**
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-**On Windows:**
-```bash
-python -m venv venv
-venv\Scripts\activate
-```
-
-### 2. Install required dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
 ## Running the Project
 
-### Main Branch (Python + DuckDB)
-
-Execute the main script from the project root directory:
+Execute the SQL pipeline from the project root directory:
 ```bash
-python src/load_and_transform.py
+duckdb ku.duckdb < sql_pipeline/load_and_transform.sql
 ```
 
 This will:
@@ -72,6 +42,11 @@ Contains the following tables:
 - `enrollments` - Course enrollment records
 - `departments` - Department contact and location information
 
+Also includes SQL views used for transformation:
+- total_credits
+- credits_by_dept
+- ranked_depts
+
 ### CSV Report (`output.csv`)
 One row per student per term (2,986 data rows + 1 header = 2,987 total lines) with columns:
 - `student_id` - Student identifier
@@ -85,19 +60,19 @@ One row per student per term (2,986 data rows + 1 header = 2,987 total lines) wi
 
 ```
 KU_Project/
-├── KU_Input/                    # Input data files
+├── KU_Input/                        # Input data files
 │   ├── student_info.sqlite3
 │   ├── enrollments.dat
 │   ├── departments.json
 │   ├── data_info.txt
 │   └── output_snippet.csv
-├── src/
-│       └── load_and_transform.py  # Main ETL script
+├── sql_pipeline/
+│   └── load_and_transform.sql       # Pure SQL ETL pipeline
 ├── docs/
 │   └── TakeHomeProgrammingAssignment.pdf
-├── requirements.txt             # Python dependencies
-├── README.md                    # This file
-└── ARCHITECTURE.md              # Detailed architecture documentation
+├── README.md                        # This file
+└── ARCHITECTURE.md               
+
 ```
 
 ## Data Transformations
@@ -150,23 +125,16 @@ When a student has equal credits in multiple departments for a term, the departm
 
 ## Dependencies
 
-See `requirements.txt` for specific versions:
-- `duckdb` - In-process SQL database
-- `pandas` - Data manipulation and CSV I/O
-- `sqlite3` - Built-in Python module for SQLite access
-- `json` - Built-in Python module for JSON parsing
+Only requires:
+- DuckDB CLI
 
 ## Notes
 
 - The script creates/overwrites `ku.duckdb` and `output.csv` on each run
-- All paths are calculated relative to the script location for portability
-- The DuckDB file can be queried directly using the DuckDB CLI or Python API for ad-hoc analysis
+- All processing is performed inside DuckDB using SQL
+- The DuckDB file can be queried directly using the DuckDB CLI for ad-hoc analysis
 
 ---
-
-## Alternate SQL-Only Implementation
-
-An alternate pure SQL implementation is available in the `sql-only-alt` branch. This approach uses only SQL for all data loading and transformations, with no Python or pandas dependencies.
 
 ### Why Created
 - Demonstrates database-native data processing with explicit schema constraints
@@ -175,30 +143,26 @@ An alternate pure SQL implementation is available in the `sql-only-alt` branch. 
 - Shows proper relational database design with PRIMARY KEY, FOREIGN KEY, and NOT NULL constraints
 - Includes built-in validation checks for data quality assurance
 
-### How to Run
-```bash
-# Switch to the SQL-only branch
-git checkout sql-only-alt
-
-# Ensure you have DuckDB CLI installed
-duckdb --version
-
-# Run the SQL pipeline
-duckdb ku.duckdb < sql_pipeline/ku_load_and_transform.sql
-```
-
-### Key Differences
-- **Data Loading**: Uses DuckDB's native `ATTACH`, `read_csv()`, and `read_json()` functions
-- **Schema Design**: Explicit table definitions with PRIMARY KEY, FOREIGN KEY, and NOT NULL constraints
-- **Transformations**: Pure SQL views and queries (no pandas operations)
-- **Validation**: Built-in checks at each stage (source tables, views, final output)
-- **Output**: Uses SQL `COPY TO` command instead of pandas `to_csv()`
-- **Dependencies**: Only requires DuckDB CLI (no Python packages needed)
 
 ### Schema Constraints (SQL-Only Branch)
 - **Primary Keys**: student.EMPLID, acad_prog.ID, departments.DEPT_CODE
 - **Foreign Keys**: acad_prog.EMPLID → student.EMPLID, enrollments.EMPLID → student.EMPLID
 - **NOT NULL**: Critical fields like names, department codes, and enrollment details
 
-### Note
-Both implementations produce identical output (2,986 data rows + 1 header = 2,987 total lines) and follow the same logical transformation flow.
+
+
+### Validation & Exit Strategy
+
+The pipeline includes fail-fast validation checks to ensure data integrity at each stage.
+
+Validation queries verify:
+- Source tables are not empty after loading
+- Aggregated views produce results
+- Final output contains records before export
+
+If any validation fails, the script intentionally triggers a runtime error and stops execution. This prevents exporting incomplete or invalid results.
+
+This ensures:
+- No silent failures
+- No empty output files
+- Deterministic and reliable execution

@@ -24,7 +24,7 @@ SELECT
     UPPER(TRIM(LAST_NAME)) AS LAST_NAME,
     UPPER(TRIM(NAME)) AS NAME,
     UPPER(TRIM(EMAIL_ADDR)) AS EMAIL_ADDR,
-    TRIM(BIRTHDATE) AS BIRTHDATE,
+    CAST(TRIM(BIRTHDATE) AS DATE) AS BIRTHDATE,
     TRIM(ADMIT_TERM) AS ADMIT_TERM,
     UPPER(TRIM(ADMIT_TYPE)) AS ADMIT_TYPE
 FROM sqlite_db.student;
@@ -48,7 +48,7 @@ SELECT
     UPPER(TRIM(ACAD_PROG)) AS ACAD_PROG,
     UPPER(TRIM(PROG_STATUS)) AS PROG_STATUS,
     UPPER(TRIM(PROG_ACTION)) AS PROG_ACTION,
-    TRIM(EFFDT) AS EFFDT,
+    CAST(TRIM(EFFDT) AS DATE) AS EFFDT,
     UPPER(TRIM(DEGREE)) AS DEGREE
 FROM sqlite_db.acad_prog;
 
@@ -106,9 +106,9 @@ SELECT
 FROM read_json('KU_Input/departments.json');
 
 -- validate loaded data (will fail if tables are empty)
-SELECT CASE WHEN (SELECT COUNT(*) FROM student) = 0 THEN CAST('student table is empty' AS INT) ELSE 1 END;
-SELECT CASE WHEN (SELECT COUNT(*) FROM enrollments) = 0 THEN CAST('enrollments table is empty' AS INT) ELSE 1 END;
-SELECT CASE WHEN (SELECT COUNT(*) FROM departments) = 0 THEN CAST('departments table is empty' AS INT) ELSE 1 END;
+SELECT CASE WHEN COUNT(*) = 0 THEN 1/0 END FROM student;
+SELECT CASE WHEN COUNT(*) = 0 THEN 1/0 END FROM enrollments;
+SELECT CASE WHEN COUNT(*) = 0 THEN 1/0 END FROM departments;
 
 -- total credits per student-term
 CREATE OR REPLACE VIEW total_credits AS
@@ -120,7 +120,7 @@ FROM enrollments
 GROUP BY EMPLID, STRM;
 
 -- validate total credits view (will fail if empty)
-SELECT CASE WHEN (SELECT COUNT(*) FROM total_credits) = 0 THEN CAST('total_credits view is empty' AS INT) ELSE 1 END;
+SELECT CASE WHEN COUNT(*) = 0 THEN 1/0 END FROM total_credits;
 
 -- credits per student-term-department
 CREATE OR REPLACE VIEW credits_by_dept AS
@@ -166,7 +166,7 @@ LEFT JOIN student s
 ORDER BY t.student_id, t.term;
 
 -- validate final output before export (will fail if empty)
-SELECT CASE WHEN (SELECT COUNT(*) FROM final_output) = 0 THEN CAST('final output is empty' AS INT) ELSE 1 END;
+SELECT CASE WHEN COUNT(*) = 0 THEN 1/0 END FROM final_output;
 
 -- export to CSV
 COPY final_output TO 'output.csv' (HEADER, DELIMITER ',');

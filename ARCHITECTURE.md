@@ -284,9 +284,3 @@ The SQL-only implementation includes lightweight validation at key stages:
 - Validates final output before export
 - Fails fast with clear error messages if data is missing
 
-### Trade-offs
-- Requires DuckDB CLI installation
-- Less flexible for complex data cleaning
-- No programmatic error handling
-
-Both implementations produce identical results and demonstrate different approaches to the same data engineering problem.

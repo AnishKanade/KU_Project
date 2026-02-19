@@ -4,6 +4,7 @@
 
 This project loads student data from multiple sources (SQLite, pipe-delimited file, JSON) into a DuckDB database using pure SQL and generates a comprehensive enrollment report showing each student's term-by-term credit totals and primary department focus.
 
+
 All data loading, transformations, validation, and export steps are implemented entirely in SQL.
 
 

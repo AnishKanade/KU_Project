@@ -240,7 +240,6 @@ The output CSV file (`output.csv`) contains:
   - `total_credits` – Total credits enrolled for that term (integer)
   - `focused_department_name` – Department with most credits (alphabetically first if tied)
   - `focused_department_contact` – Contact person for the focused department
-
 ---
 
 ## SQL-Only Architecture Variant
@@ -283,4 +282,3 @@ The SQL-only implementation includes lightweight validation at key stages:
 - Confirms transformation views produce results
 - Validates final output before export
 - Fails fast with clear error messages if data is missing
-

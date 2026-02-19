@@ -170,3 +170,4 @@ SELECT CASE WHEN COUNT(*) = 0 THEN 1/0 END FROM final_output;
 
 -- export to CSV
 COPY final_output TO 'output.csv' (HEADER, DELIMITER ',');
+

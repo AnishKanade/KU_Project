@@ -50,7 +50,10 @@ python src/load_and_transform.py
 This will:
 1. Create a DuckDB database file (`ku.duckdb`) in the project root
 2. Load all data from the three input files into DuckDB tables
-3. Generate `output.csv` with the required student enrollment summary
+3. **Validate data quality** with 11+ comprehensive checks
+4. **Automatically clean** common data quality issues
+5. **Apply database constraints** (primary keys, foreign keys)
+6. Generate `output.csv` with the required student enrollment summary
 
 ## Output
 
@@ -94,19 +97,19 @@ KU_Project/
 For a detailed visual representation and technical explanation, see `ARCHITECTURE.md`.
 
 ### Step 1: Load SQLite Tables
-- Connect to `student_info.sqlite3`
+- Attach SQLite database using DuckDB's native SQLite reader
 - Extract `student` and `acad_prog` tables
-- Normalize column names to uppercase
+- Normalize column names to uppercase in SQL
 - Create corresponding tables in DuckDB
 
 ### Step 2: Load Enrollments
-- Read pipe-delimited `enrollments.dat` file
-- Parse and clean data (strip whitespace, convert credit hours to integers)
+- Read pipe-delimited `enrollments.dat` file using DuckDB's CSV reader
+- Clean data and convert types directly in SQL (strip whitespace, convert credit hours to integers)
 - Create `enrollments` table in DuckDB
 
 ### Step 3: Load Departments
-- Parse `departments.json` file
-- Normalize column names and clean data
+- Parse `departments.json` file using DuckDB's JSON reader
+- Normalize column names and clean data in SQL
 - Create `departments` table in DuckDB
 
 ### Step 4: Generate Report
@@ -131,22 +134,65 @@ The DuckDB schema mirrors the source data structure to maintain flexibility for 
 ### Focused Department Logic
 When a student has equal credits in multiple departments for a term, the department that comes first alphabetically is selected. This is implemented using SQL window functions with a compound ORDER BY clause.
 
-### Data Quality
-- All string fields are trimmed of whitespace
-- Credit hours are converted to integers with error handling
-- Left joins preserve all student records even if department information is missing
-- Column names are normalized to uppercase for consistency
+### Data Quality Framework
+The pipeline includes a comprehensive data quality validation system:
+
+**11+ Validation Checks:**
+- Duplicate detection (students, programs, departments, enrollments)
+- Referential integrity (orphaned records)
+- NULL value checks on required fields
+- Range validation (credit hours 0-30)
+- Empty string detection
+- Business rule validation (students without enrollments)
+
+**Automatic Cleaning:**
+- Removes duplicate records (keeps first occurrence)
+- Removes orphaned records (invalid foreign keys)
+- Fixes invalid credit hours (caps to valid range)
+- Removes NULL required fields
+- Detailed audit logging of all cleaning actions
+
+**Database Constraints:**
+- Primary keys on all tables (including temporal key for `acad_prog`)
+- Foreign keys enforcing referential integrity
+- Prevents data quality issues at the database level
 
 ## Dependencies
 
 See `requirements.txt` for specific versions:
-- `duckdb` - In-process SQL database
-- `pandas` - Data manipulation and CSV I/O
-- `sqlite3` - Built-in Python module for SQLite access
-- `json` - Built-in Python module for JSON parsing
+- `duckdb` - In-process SQL database with native readers for SQLite, CSV, and JSON
+
+**Built-in Python modules** (no installation needed):
+- `logging` - Professional logging framework
+- `time` - Performance metrics tracking
+- Standard library modules (`os`, `sys`, `traceback`, `datetime`)
+
+**Note:** This project uses DuckDB's native data readers instead of pandas for better performance and fewer dependencies.
+
+## Additional Tools
+
+### Verify Database Constraints
+```bash
+python verify_constraints.py
+```
+Validates that all primary and foreign key constraints are properly applied and checks for data integrity issues.
+
+### Run Tests
+```bash
+python test_pipeline.py
+```
+Runs the test suite to verify pipeline functionality.
+
+### View Database Schema
+See `DATABASE_SCHEMA.md` for detailed documentation of:
+- Entity Relationship Diagram (ERD)
+- Table definitions with constraints
+- Primary and foreign key relationships
+- Temporal data modeling (SCD Type 2)
 
 ## Notes
 
 - The script creates/overwrites `ku.duckdb` and `output.csv` on each run
 - All paths are calculated relative to the script location for portability
 - The DuckDB file can be queried directly using the DuckDB CLI or Python API for ad-hoc analysis
+- Data quality validation runs automatically before constraints are applied

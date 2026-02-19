@@ -10,7 +10,7 @@ This project implements an ETL (Extract, Transform, Load) pipeline that:
 
 **Technology Choice**: DuckDB was selected as the database because it is an in-process analytical database that requires no server setup, supports advanced SQL features (window functions), and is optimized for analytical queries.
 
-**Programming Language**: Python was used with pandas for data loading and cleaning, and DuckDB for SQL transformations.
+**Programming Language**: Python was used with DuckDB's native readers for data loading. This approach eliminates the need for pandas, resulting in better performance, lower memory usage, and fewer dependencies. All data cleaning and transformations are performed in SQL.
 
 ---
 
@@ -57,18 +57,20 @@ This project implements an ETL (Extract, Transform, Load) pipeline that:
 ### Step 1: Load Data into DuckDB
 
 **SQLite Tables (student_info.sqlite3)**
-- Read `student` and `acad_prog` tables using Python's sqlite3 library
-- Normalize column names to uppercase
+- Attach SQLite database using DuckDB's native `ATTACH` command
+- Read `student` and `acad_prog` tables directly with SQL
+- Normalize column names to uppercase using SQL aliases
 - Load into DuckDB tables
 
 **Enrollments File (enrollments.dat)**
-- Parse pipe-delimited file using pandas
-- Clean data: strip whitespace, convert credit hours to integers
+- Parse pipe-delimited file using DuckDB's `read_csv()` function
+- Clean data in SQL: `TRIM()` for whitespace, `TRY_CAST()` for type conversion
+- Convert credit hours to integers with error handling
 - Load into DuckDB `enrollments` table
 
 **Departments File (departments.json)**
-- Parse JSON file into pandas DataFrame
-- Normalize column names and clean data
+- Parse JSON file using DuckDB's `read_json()` function with auto-detection
+- Normalize column names and clean data using SQL transformations
 - Load into DuckDB `departments` table
 
 ### Step 2: Calculate Total Credits per Student-Term
@@ -168,10 +170,17 @@ This produces one row per student per term with:
 - Window functions cleanly implement the tie-breaking logic
 
 **Data Quality**: 
-- All string fields are trimmed of whitespace
-- Credit hours are converted to integers with error handling
+- All string fields are trimmed of whitespace using SQL `TRIM()` function
+- Credit hours are converted to integers with error handling using `TRY_CAST()` and `COALESCE()`
 - LEFT JOINs preserve all student records even if department information is missing
 - Column names are normalized to uppercase for consistency
+- All data cleaning performed in SQL for better performance
+
+**Performance Optimization**:
+- Uses DuckDB's native readers (SQLite, CSV, JSON) instead of pandas
+- Eliminates intermediate DataFrame conversions
+- Reduces memory footprint by streaming data directly
+- Leverages DuckDB's columnar processing and parallel execution
 
 **Focused Department Logic**: When a student has equal credits in multiple departments for a term, the department that comes first alphabetically is selected. This is implemented using SQL's `ORDER BY` with multiple columns in the window function.
 

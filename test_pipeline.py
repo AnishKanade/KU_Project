@@ -2,7 +2,6 @@
 Simple unit tests for the KU Student Data Pipeline
 """
 import os
-import pandas as pd
 import duckdb
 
 # Paths
@@ -17,38 +16,90 @@ def test_output_csv_exists():
 
 def test_output_csv_structure():
     """Test that output.csv has correct columns"""
-    df = pd.read_csv(OUT_CSV)
+    con = duckdb.connect()
+    columns = con.execute(f"SELECT * FROM read_csv('{OUT_CSV}') LIMIT 0").description
+    actual_cols = [col[0] for col in columns]
     expected_cols = ["student_id", "last_name", "term", "total_credits",
                      "focused_department_name", "focused_department_contact"]
-    assert list(df.columns) == expected_cols, f"Column mismatch: {list(df.columns)}"
+    assert actual_cols == expected_cols, f"Column mismatch: {actual_cols}"
+    con.close()
     print("✓ Test passed: output.csv has correct columns")
 
 def test_output_csv_row_count():
     """Test that output.csv has data"""
-    df = pd.read_csv(OUT_CSV)
-    assert len(df) > 0, "output.csv is empty"
-    print(f"✓ Test passed: output.csv has {len(df)} rows")
+    con = duckdb.connect()
+    row_count = con.execute(f"SELECT COUNT(*) FROM read_csv('{OUT_CSV}')").fetchone()[0]
+    assert row_count > 0, "output.csv is empty"
+    con.close()
+    print(f"✓ Test passed: output.csv has {row_count} rows")
 
-def test_no_null_values():
-    """Test that there are no null values in critical columns"""
-    df = pd.read_csv(OUT_CSV)
-    assert df["student_id"].notna().all(), "Found null student_id values"
-    assert df["last_name"].notna().all(), "Found null last_name values"
-    assert df["term"].notna().all(), "Found null term values"
-    assert df["total_credits"].notna().all(), "Found null total_credits values"
+def test_output_csv_no_nulls():
+    """Test that critical columns have no null values"""
+    con = duckdb.connect()
+    null_checks = con.execute(f"""
+        SELECT 
+            COUNT(*) FILTER (WHERE student_id IS NULL) as null_student_id,
+            COUNT(*) FILTER (WHERE last_name IS NULL) as null_last_name,
+            COUNT(*) FILTER (WHERE term IS NULL) as null_term,
+            COUNT(*) FILTER (WHERE total_credits IS NULL) as null_total_credits
+        FROM read_csv('{OUT_CSV}')
+    """).fetchone()
+    con.close()
+    assert null_checks[0] == 0, "student_id has null values"
+    assert null_checks[1] == 0, "last_name has null values"
+    assert null_checks[2] == 0, "term has null values"
+    assert null_checks[3] == 0, "total_credits has null values"
     print("✓ Test passed: No null values in critical columns")
 
+def test_output_csv_data_types():
+    """Test that columns have correct data types"""
+    con = duckdb.connect()
+    # Check if student_id and total_credits can be cast to integers
+    try:
+        con.execute(f"""
+            SELECT 
+                CAST(student_id AS INTEGER),
+                CAST(total_credits AS INTEGER)
+            FROM read_csv('{OUT_CSV}')
+            LIMIT 1
+        """).fetchone()
+        con.close()
+        print("✓ Test passed: Data types are correct")
+    except Exception as e:
+        con.close()
+        raise AssertionError(f"Data type validation failed: {e}")
+
 def test_total_credits_are_integers():
-    """Test that total_credits are integers"""
-    df = pd.read_csv(OUT_CSV)
-    assert df["total_credits"].dtype in ['int64', 'int32'], "total_credits should be integers"
-    print("✓ Test passed: total_credits are integers")
+    """Test that total_credits are integers and non-negative"""
+    con = duckdb.connect()
+    result = con.execute(f"""
+        SELECT 
+            COUNT(*) FILTER (WHERE total_credits < 0) as negative_count,
+            COUNT(*) FILTER (WHERE TRY_CAST(total_credits AS INTEGER) IS NULL) as non_integer_count
+        FROM read_csv('{OUT_CSV}')
+    """).fetchone()
+    con.close()
+    assert result[0] == 0, "Found negative credit values"
+    assert result[1] == 0, "Found non-integer credit values"
+    print("✓ Test passed: All credit values are non-negative integers")
+
+def test_no_null_values():
+    """Test that critical columns have no null values"""
+    test_output_csv_no_nulls()
 
 def test_no_duplicate_student_term():
     """Test that there are no duplicate student-term combinations"""
-    df = pd.read_csv(OUT_CSV)
-    duplicates = df.groupby(["student_id", "term"]).size()
-    duplicates = duplicates[duplicates > 1]
+    con = duckdb.connect()
+    duplicates = con.execute(f"""
+        SELECT 
+            student_id, 
+            term, 
+            COUNT(*) as count
+        FROM read_csv('{OUT_CSV}')
+        GROUP BY student_id, term
+        HAVING COUNT(*) > 1
+    """).fetchall()
+    con.close()
     assert len(duplicates) == 0, f"Found {len(duplicates)} duplicate student-term combinations"
     print("✓ Test passed: No duplicate student-term combinations")
 
@@ -70,16 +121,21 @@ def test_duckdb_tables():
 
 def test_sample_data_matches():
     """Test that sample rows match expected output"""
-    df = pd.read_csv(OUT_CSV)
+    con = duckdb.connect()
     
     # Test case from output_snippet.csv
-    row = df[(df["student_id"] == 1000000) & (df["term"] == 2244)]
-    if len(row) > 0:
-        row = row.iloc[0]
-        assert row["last_name"] == "Anderson", "Last name mismatch"
-        assert row["total_credits"] == 13, "Total credits mismatch"
-        assert row["focused_department_name"] == "Physics", "Department mismatch"
-        assert row["focused_department_contact"] == "Dr. James Wilson", "Contact mismatch"
+    row = con.execute(f"""
+        SELECT * FROM read_csv('{OUT_CSV}')
+        WHERE student_id = 1000000 AND term = 2244
+    """).fetchone()
+    con.close()
+    
+    if row:
+        # row format: (student_id, last_name, term, total_credits, dept_name, dept_contact)
+        assert row[1] == "Anderson", "Last name mismatch"
+        assert row[3] == 13, "Total credits mismatch"
+        assert row[4] == "Physics", "Department mismatch"
+        assert row[5] == "Dr. James Wilson", "Contact mismatch"
         print("✓ Test passed: Sample data matches expected output")
     else:
         print("⚠ Warning: Sample student not found in output")
